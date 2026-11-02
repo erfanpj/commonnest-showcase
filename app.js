@@ -4,6 +4,7 @@ import {
   OWNERS,
   RECIPES,
   seedState,
+  sanitizeParsedState,
   shoppingWithPantry,
   scheduleMeal,
   addIngredientsForMeal,
@@ -16,6 +17,8 @@ const $ = (sel, root = document) => root.querySelector(sel);
 
 let state = seedState();
 let storageOk = true;
+/** @type {{ kind: string, label?: string, mealId?: string, recipeId?: string } | null} */
+let focusAfterRender = null;
 
 function storageAvailable() {
   try {
@@ -27,20 +30,13 @@ function storageAvailable() {
 }
 
 function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return seedState();
-  const parsed = JSON.parse(raw);
-  const base = seedState();
-  return {
-    ...base,
-    ...parsed,
-    tasks: Array.isArray(parsed.tasks) ? parsed.tasks : base.tasks,
-    mealInstances: Array.isArray(parsed.mealInstances) ? parsed.mealInstances : base.mealInstances,
-    ingredientsCountedIds: Array.isArray(parsed.ingredientsCountedIds)
-      ? parsed.ingredientsCountedIds
-      : base.ingredientsCountedIds,
-    shopping: parsed.shopping && typeof parsed.shopping === "object" ? parsed.shopping : {},
-  };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return seedState();
+    return sanitizeParsedState(JSON.parse(raw));
+  } catch {
+    return seedState();
+  }
 }
 
 function saveState() {
@@ -50,6 +46,26 @@ function saveState() {
   } catch {
     storageOk = false;
     $("#storageBanner").hidden = false;
+  }
+}
+
+function applyFocusReturn() {
+  if (!focusAfterRender) return;
+  const target = focusAfterRender;
+  focusAfterRender = null;
+  if (target.kind === "taskDay" && target.label) {
+    const sel = document.querySelector(`#taskList select[aria-label="${CSS.escape(target.label)}"]`);
+    sel?.focus();
+    sel?.scrollIntoView({ block: "nearest" });
+  } else if (target.kind === "taskOwner" && target.label) {
+    const sel = document.querySelector(`#taskList select[aria-label="${CSS.escape(target.label)}"]`);
+    sel?.focus();
+  } else if (target.kind === "schedule" && target.recipeId) {
+    const wrap = document.querySelector(`[data-schedule-recipe="${target.recipeId}"] button`);
+    wrap?.focus();
+  } else if (target.kind === "mealAdd" && target.mealId) {
+    const btn = document.querySelector(`button[data-meal-id="${CSS.escape(target.mealId)}"]`);
+    btn?.focus();
   }
 }
 
@@ -73,7 +89,11 @@ function renderWeek() {
       tUl.className = "agenda-tasks";
       for (const t of tasks) {
         const li = document.createElement("li");
-        li.innerHTML = `<span class="owner-badge" title="${t.owner}">${ownerInitial(t.owner)}</span> ${t.title}`;
+        const badge = document.createElement("span");
+        badge.className = "owner-badge";
+        badge.title = t.owner;
+        badge.textContent = ownerInitial(t.owner);
+        li.append(badge, document.createTextNode(` ${t.title}`));
         tUl.appendChild(li);
       }
       col.appendChild(tUl);
@@ -86,18 +106,19 @@ function renderWeek() {
       for (const m of meals) {
         const li = document.createElement("li");
         const recipe = RECIPES[m.recipeId];
-        li.textContent = recipe?.name || m.recipeId;
+        li.appendChild(document.createTextNode(recipe?.name || m.recipeId));
         const addBtn = document.createElement("button");
         addBtn.type = "button";
         addBtn.className = "btn-inline";
+        addBtn.dataset.mealId = m.id;
         const counted = state.ingredientsCountedIds.includes(m.id);
         addBtn.textContent = counted ? "Ingredients already on list" : "Add ingredients to list";
         addBtn.disabled = counted;
         addBtn.addEventListener("click", () => {
           state = addIngredientsForMeal(state, m.id);
           saveState();
+          focusAfterRender = { kind: "mealAdd", mealId: m.id };
           renderAll();
-          addBtn.focus();
         });
         li.appendChild(document.createElement("br"));
         li.appendChild(addBtn);
@@ -128,8 +149,9 @@ function renderTasks() {
     title.textContent = task.title;
     const ownerLabel = document.createElement("label");
     ownerLabel.textContent = "Owner ";
+    const ownerAria = `Owner for ${task.title}`;
     const ownerSel = document.createElement("select");
-    ownerSel.setAttribute("aria-label", `Owner for ${task.title}`);
+    ownerSel.setAttribute("aria-label", ownerAria);
     for (const o of OWNERS) {
       const opt = document.createElement("option");
       opt.value = o;
@@ -140,13 +162,15 @@ function renderTasks() {
     ownerSel.addEventListener("change", () => {
       state = updateTask(state, task.id, { owner: ownerSel.value });
       saveState();
+      focusAfterRender = { kind: "taskOwner", label: ownerAria };
       renderAll();
     });
     ownerLabel.appendChild(ownerSel);
     const dayLabel = document.createElement("label");
     dayLabel.textContent = " Due ";
+    const dayAria = `Due day for ${task.title}`;
     const daySel = document.createElement("select");
-    daySel.setAttribute("aria-label", `Due day for ${task.title}`);
+    daySel.setAttribute("aria-label", dayAria);
     for (const d of DAYS) {
       const opt = document.createElement("option");
       opt.value = d;
@@ -157,8 +181,8 @@ function renderTasks() {
     daySel.addEventListener("change", () => {
       state = updateTask(state, task.id, { day: daySel.value });
       saveState();
+      focusAfterRender = { kind: "taskDay", label: dayAria };
       renderAll();
-      daySel.focus();
     });
     dayLabel.appendChild(daySel);
     li.append(title, ownerLabel, dayLabel);
@@ -173,8 +197,11 @@ function renderMealsControls() {
     const recipe = RECIPES[rid];
     const wrap = document.createElement("div");
     wrap.className = "meal-add";
+    wrap.dataset.scheduleRecipe = rid;
     const title = document.createElement("p");
-    title.innerHTML = `<strong>${recipe.name}</strong>`;
+    const strong = document.createElement("strong");
+    strong.textContent = recipe.name;
+    title.appendChild(strong);
     wrap.appendChild(title);
     const daySel = document.createElement("select");
     daySel.setAttribute("aria-label", `Day to schedule ${recipe.name}`);
@@ -190,8 +217,8 @@ function renderMealsControls() {
     btn.addEventListener("click", () => {
       state = scheduleMeal(state, rid, daySel.value);
       saveState();
+      focusAfterRender = { kind: "schedule", recipeId: rid };
       renderAll();
-      btn.focus();
     });
     wrap.append(daySel, btn);
     host.appendChild(wrap);
@@ -252,6 +279,7 @@ function renderAll() {
   renderTasks();
   renderMealsControls();
   renderShopping();
+  applyFocusReturn();
 }
 
 function bindReset() {
@@ -263,16 +291,23 @@ function bindReset() {
       /* ignore */
     }
     state = seedState();
-    storageOk = true;
-    $("#storageBanner").hidden = true;
+    storageOk = storageAvailable();
+    focusAfterRender = null;
+    $("#storageBanner").hidden = storageOk;
     renderAll();
   });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  storageOk = storageAvailable();
-  state = storageOk ? loadState() : seedState();
-  if (!storageOk) $("#storageBanner").hidden = false;
+  if (document.documentElement.dataset.storageUnavailable === "1") {
+    storageOk = false;
+    state = seedState();
+    $("#storageBanner").hidden = false;
+  } else {
+    storageOk = storageAvailable();
+    state = storageOk ? loadState() : seedState();
+    if (!storageOk) $("#storageBanner").hidden = false;
+  }
   renderAll();
   bindReset();
 });

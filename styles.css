@@ -65,7 +65,7 @@ body {
 h1 { font-size: 1.3rem; margin-top: 0; }
 h2 { font-size: 1.05rem; margin-top: 0; color: var(--teal); }
 h3 { font-size: 0.95rem; margin: 0 0 0.35rem; color: var(--raspberry); }
-.muted { color: var(--muted); font-size: 0.92rem; }
+.muted { color: #334155; font-size: 0.92rem; }
 .feedback { color: var(--teal); font-weight: 600; }
 
 .week-grid {

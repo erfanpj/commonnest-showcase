@@ -177,4 +177,62 @@ export function emptyState() {
   return seedState();
 }
 
+export function sanitizeParsedState(raw) {
+  const base = seedState();
+  if (!raw || typeof raw !== "object") return base;
+  try {
+    let tasks = base.tasks;
+    if (Array.isArray(raw.tasks)) {
+      const parsed = raw.tasks
+        .map((t) => {
+          if (!t || typeof t !== "object" || typeof t.id !== "string") return null;
+          const seed = base.tasks.find((x) => x.id === t.id);
+          const title = typeof t.title === "string" ? t.title : seed?.title;
+          if (!title) return null;
+          const owner = OWNERS.includes(t.owner) ? t.owner : seed?.owner ?? OWNERS[0];
+          const day = DAYS.includes(t.day) ? t.day : seed?.day ?? "Mon";
+          return { id: t.id, title, owner, day };
+        })
+        .filter(Boolean);
+      if (parsed.length >= 1) tasks = parsed;
+    }
+
+    let mealInstances = base.mealInstances;
+    if (Array.isArray(raw.mealInstances)) {
+      const parsed = raw.mealInstances
+        .map((m) => {
+          if (!m || typeof m !== "object" || typeof m.id !== "string") return null;
+          if (!RECIPES[m.recipeId]) return null;
+          if (!DAYS.includes(m.day)) return null;
+          return { id: m.id, recipeId: m.recipeId, day: m.day };
+        })
+        .filter(Boolean);
+      if (parsed.length >= 1) mealInstances = parsed;
+    }
+
+    let ingredientsCountedIds = base.ingredientsCountedIds;
+    if (Array.isArray(raw.ingredientsCountedIds)) {
+      ingredientsCountedIds = raw.ingredientsCountedIds.filter(
+        (id) => typeof id === "string" && mealInstances.some((m) => m.id === id),
+      );
+    }
+
+    const shopping =
+      raw.shopping && typeof raw.shopping === "object" && !Array.isArray(raw.shopping)
+        ? raw.shopping
+        : {};
+
+    return {
+      ...base,
+      tasks,
+      mealInstances,
+      ingredientsCountedIds,
+      shopping,
+      mealFeedback: typeof raw.mealFeedback === "string" ? raw.mealFeedback : null,
+    };
+  } catch {
+    return base;
+  }
+}
+
 export const PAGES_PATH_PREFIX = "/commonnest-showcase";

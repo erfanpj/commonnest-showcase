@@ -50,6 +50,13 @@
 
     <p class="actions"><button type="button" id="resetBtn" class="btn-secondary">Reset this week</button></p>
   </main>
+  <script>
+    try {
+      localStorage.getItem("commonnest-independent-probe");
+    } catch (e) {
+      document.documentElement.dataset.storageUnavailable = "1";
+    }
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

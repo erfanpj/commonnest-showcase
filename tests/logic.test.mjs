@@ -8,6 +8,7 @@ import {
   updateTask,
   toggleShoppingLine,
   tasksForDay,
+  sanitizeParsedState,
   STORAGE_KEY,
 } from "../logic.js";
 
@@ -50,6 +51,22 @@ describe("shopping", () => {
     );
     assert.equal(line.checked, false);
     assert.match(line.reopenNote, /500/);
+  });
+});
+
+describe("sanitize", () => {
+  it("drops malformed tasks and meals", () => {
+    const s = sanitizeParsedState({
+      tasks: [{ id: "t1", title: "Pick up vegetables", owner: "Noah", day: "BadDay" }],
+      mealInstances: [{ id: "m1", recipeId: "nope", day: "Thu" }],
+    });
+    assert.equal(s.tasks.find((t) => t.id === "t1")?.day, "Mon");
+    assert.ok(s.mealInstances.some((m) => m.id === "m1"));
+  });
+
+  it("survives invalid JSON shape", () => {
+    const s = sanitizeParsedState(null);
+    assert.equal(s.tasks.length, 3);
   });
 });
 
