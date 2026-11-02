@@ -2,6 +2,8 @@
 
 Original browser demo for a **fictional one-week plan** with two named owners, movable tasks, meal scheduling, and a shopping list that sums compatible ingredient units. Not a recovered historical product.
 
+**Live demo:** https://erfanpj.github.io/commonnest-showcase/
+
 ![Week agenda with tasks and shopping at desktop width](docs/evidence/week-agenda-desktop-1280.png)
 
 ![Week agenda on a phone-width layout](docs/evidence/week-agenda-mobile-390.png)
