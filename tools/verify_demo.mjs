@@ -5,38 +5,18 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PAGES_PATH_PREFIX } from "../logic.js";
+import { allocatePort, pagesBaseUrl } from "./pages_server.mjs";
+import { browserPath, stagePagesSite } from "./stage_site.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
-const reviewRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cn-demo-"));
-const mount = path.join(reviewRoot, "commonnest-showcase", "demo");
-fs.mkdirSync(path.dirname(mount), { recursive: true });
-fs.cpSync(path.join(repoRoot, "demo"), mount, { recursive: true });
 
-const PORT = 8821;
-const BASE = `http://127.0.0.1:${PORT}/commonnest-showcase/demo/`;
-
-const server = spawn(
-  "python",
-  ["-m", "http.server", String(PORT), "--bind", "127.0.0.1", "--directory", reviewRoot],
-  { stdio: "ignore" },
-);
-
-function browser() {
-  for (const p of [
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  ]) {
-    if (fs.existsSync(p)) return p;
-  }
-  return "msedge";
-}
-
-async function withPage(url, fn) {
-  const dbgPort = 9980 + Math.floor(Math.random() * 20);
+async function withPage(baseUrl, fn) {
+  const dbgPort = 9980 + Math.floor(Math.random() * 30);
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "cn-verify-"));
   const proc = spawn(
-    browser(),
+    browserPath(),
     ["--headless=new", `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userData}`, "about:blank"],
     { stdio: "ignore" },
   );
@@ -69,41 +49,55 @@ async function withPage(url, fn) {
       ws.addEventListener("open", res);
       ws.addEventListener("error", rej);
     });
-    await send("Page.navigate", { url });
+    await send("Page.navigate", { url: baseUrl });
     await new Promise((r) => setTimeout(r, 1000));
     const evalJs = async (expression) => {
       const r = await send("Runtime.evaluate", { expression, returnByValue: true });
       return r.result.value;
     };
-    await fn(evalJs);
+    await fn({ evalJs, send });
     ws.close();
   } finally {
     proc.kill("SIGTERM");
     try {
       fs.rmSync(userData, { recursive: true, force: true, maxRetries: 3 });
     } catch {
-      /* Windows may lock profile briefly */
+      /* ignore */
     }
   }
 }
 
 async function main() {
-  await new Promise((r) => setTimeout(r, 600));
+  const port = await allocatePort();
+  const { reviewRoot } = stagePagesSite(repoRoot, PAGES_PATH_PREFIX);
+  const base = pagesBaseUrl(port, PAGES_PATH_PREFIX);
+  const server = spawn(
+    "python",
+    ["-m", "http.server", String(port), "--bind", "127.0.0.1", "--directory", reviewRoot],
+    { stdio: "ignore" },
+  );
+  await new Promise((r) => setTimeout(r, 500));
   try {
-    await withPage(BASE, async (evalJs) => {
+    await withPage(base, async ({ evalJs, send }) => {
       const text = await evalJs(
         `[...document.querySelectorAll('#shoppingList li label')].map(l=>l.textContent.trim()).join('|')`,
       );
-      if (!text.includes("350 g Tomatoes")) throw new Error(`expected 350g tomatoes got ${text}`);
-      await evalJs(
-        `document.querySelector('#taskList select[aria-label*="Due"]').value='Wed'; document.querySelector('#taskList select[aria-label*="Due"]').dispatchEvent(new Event('change',{bubbles:true}))`,
-      );
-      const day = await evalJs(
-        `document.querySelector('#taskList select[aria-label*="Due"]').value`,
-      );
-      if (day !== "Wed") throw new Error(`task day not updated: ${day}`);
+      if (!text.includes("350 g Tomatoes")) throw new Error(`tomatoes line: ${text}`);
+      if (!text.includes("1 kg Tomatoes")) throw new Error(`pantry kg line missing: ${text}`);
+      await evalJs(`
+        const sel = document.querySelector('#taskList select[aria-label="Due day for Pick up vegetables"]');
+        if (!sel) throw new Error('due select missing');
+        sel.value = 'Wed';
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      `);
+      await new Promise((r) => setTimeout(r, 200));
+      const monText = await evalJs(`document.querySelectorAll('.day-col')[0].innerText`);
+      const wedText = await evalJs(`document.querySelectorAll('.day-col')[2].innerText`);
+      if (monText.includes('Pick up vegetables')) throw new Error('task should leave Monday');
+      if (!wedText.includes('Pick up vegetables')) throw new Error('task should appear on Wednesday');
+      await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab" });
     });
-    console.log("verify_demo: ok", BASE);
+    console.log("verify_demo: ok", base);
   } finally {
     server.kill("SIGTERM");
     fs.rmSync(reviewRoot, { recursive: true, force: true });

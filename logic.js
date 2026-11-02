@@ -23,6 +23,17 @@ export const RECIPES = {
   },
 };
 
+/** Pantry line — different unit from recipe grams; never auto-combined. */
+export const PANTRY_LINES = [
+  {
+    key: "tomatoes::kg",
+    name: "Tomatoes",
+    unit: "kg",
+    qty: 1,
+    note: "Pantry bag — kilograms are kept separate from recipe amounts in grams.",
+  },
+];
+
 export function seedState() {
   return {
     tasks: [
@@ -34,8 +45,9 @@ export function seedState() {
       { id: "m1", recipeId: "veggie-pasta", day: "Thu" },
       { id: "m2", recipeId: "tomato-soup", day: "Sat" },
     ],
+    ingredientsCountedIds: ["m1", "m2"],
     shopping: {},
-    combineDeclined: null,
+    mealFeedback: null,
   };
 }
 
@@ -47,9 +59,12 @@ export function lineKey(name, unit) {
   return `${normalizeName(name)}::${unit}`;
 }
 
-export function aggregateShopping(mealInstances, shoppingMeta = {}) {
+export function aggregateShopping(mealInstances, shoppingMeta = {}, countedIds = null) {
+  const allowed = countedIds
+    ? mealInstances.filter((m) => countedIds.includes(m.id))
+    : mealInstances;
   const lines = new Map();
-  for (const inst of mealInstances) {
+  for (const inst of allowed) {
     const recipe = RECIPES[inst.recipeId];
     if (!recipe) continue;
     for (const ing of recipe.ingredients) {
@@ -60,6 +75,7 @@ export function aggregateShopping(mealInstances, shoppingMeta = {}) {
         unit: ing.unit,
         qty: 0,
         sources: [],
+        fromPantry: false,
       };
       prev.qty += ing.qty;
       prev.sources.push({ mealInstanceId: inst.id, recipeName: recipe.name, day: inst.day });
@@ -75,24 +91,43 @@ export function aggregateShopping(mealInstances, shoppingMeta = {}) {
   return result;
 }
 
-export function addMealInstance(state, recipeId, day) {
-  const id = `m-${state.mealInstances.length + 1}-${recipeId}`;
-  const next = {
-    ...state,
-    mealInstances: [...state.mealInstances, { id, recipeId, day }],
-    combineDeclined: null,
-  };
-  return reconcileShoppingAfterMealsChange(state, next);
+export function shoppingWithPantry(mealInstances, shoppingMeta, countedIds) {
+  const mealLines = aggregateShopping(mealInstances, shoppingMeta, countedIds);
+  const pantry = PANTRY_LINES.map((p) => ({
+    ...p,
+    sources: [],
+    checked: Boolean(shoppingMeta[p.key]?.checked),
+    reopenNote: shoppingMeta[p.key]?.reopenNote || null,
+    fromPantry: true,
+  }));
+  return [...mealLines, ...pantry].sort((a, b) =>
+    `${a.name}${a.unit}`.localeCompare(`${b.name}${b.unit}`),
+  );
 }
 
-export function addMealInstanceById(state, instance) {
-  if (state.mealInstances.some((m) => m.id === instance.id)) return state;
+export function scheduleMeal(state, recipeId, day) {
+  const id = `m-${state.mealInstances.length + 1}-${recipeId}-${day}`;
+  return {
+    ...state,
+    mealInstances: [...state.mealInstances, { id, recipeId, day }],
+    mealFeedback: `Scheduled ${RECIPES[recipeId]?.name ?? recipeId} on ${day}. Add ingredients when ready.`,
+  };
+}
+
+export function addIngredientsForMeal(state, instanceId) {
+  if (!state.mealInstances.some((m) => m.id === instanceId)) {
+    return { ...state, mealFeedback: "That meal is not on the week plan." };
+  }
+  if (state.ingredientsCountedIds.includes(instanceId)) {
+    return { ...state, mealFeedback: "Ingredients from that meal are already on the list." };
+  }
+  const prev = structuredClone(state);
   const next = {
     ...state,
-    mealInstances: [...state.mealInstances, instance],
-    combineDeclined: null,
+    ingredientsCountedIds: [...state.ingredientsCountedIds, instanceId],
+    mealFeedback: "Added ingredients from that meal to the shopping list.",
   };
-  return reconcileShoppingAfterMealsChange(state, next);
+  return reconcileShoppingAfterMealsChange(prev, next);
 }
 
 export function updateTask(state, taskId, patch) {
@@ -102,6 +137,10 @@ export function updateTask(state, taskId, patch) {
   };
 }
 
+export function tasksForDay(state, day) {
+  return state.tasks.filter((t) => t.day === day);
+}
+
 export function toggleShoppingLine(state, lineKeyStr, checked) {
   const shopping = { ...state.shopping };
   shopping[lineKeyStr] = { ...(shopping[lineKeyStr] || {}), checked, reopenNote: null };
@@ -109,33 +148,33 @@ export function toggleShoppingLine(state, lineKeyStr, checked) {
 }
 
 export function reconcileShoppingAfterMealsChange(prevState, nextState) {
-  const prevLines = aggregateShopping(prevState.mealInstances, prevState.shopping);
-  const nextLines = aggregateShopping(nextState.mealInstances, nextState.shopping);
+  const prevLines = shoppingWithPantry(
+    prevState.mealInstances,
+    prevState.shopping,
+    prevState.ingredientsCountedIds,
+  );
+  const nextLines = shoppingWithPantry(
+    nextState.mealInstances,
+    nextState.shopping,
+    nextState.ingredientsCountedIds,
+  );
   const shopping = { ...nextState.shopping };
   for (const nl of nextLines) {
-    const pl = prevLines.find((x) => x.key === nl.key);
+    if (nl.fromPantry) continue;
+    const pl = prevLines.find((x) => x.key === nl.key && !x.fromPantry);
     const meta = shopping[nl.key] || {};
     if (meta.checked && pl && pl.qty !== nl.qty) {
       shopping[nl.key] = {
         checked: false,
-        reopenNote: `Checked ${pl.qty} ${nl.unit} → now ${nl.qty} ${nl.unit}; check again after review.`,
+        reopenNote: `You checked off ${pl.qty} ${nl.unit}; the list now shows ${nl.qty} ${nl.unit}. Review and check again.`,
       };
     }
   }
   return { ...nextState, shopping };
 }
 
-export function tryCombineUnits(state, nameA, unitA, nameB, unitB) {
-  if (unitA === unitB) return { ok: true, state };
-  return {
-    ok: false,
-    state: {
-      ...state,
-      combineDeclined: `Cannot combine ${unitA} and ${unitB} for ${nameA}. Keep separate lines.`,
-    },
-  };
-}
-
 export function emptyState() {
   return seedState();
 }
+
+export const PAGES_PATH_PREFIX = "/commonnest-showcase";

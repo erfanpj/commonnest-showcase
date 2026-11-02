@@ -3,30 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Commonnest — fictional week demo</title>
-  <link rel="stylesheet" href="demo.css">
+  <title>Commonnest — sample week</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <a class="skip-link" href="#tasks">Skip to tasks</a>
+  <a class="skip-link" href="#week-heading">Skip to week</a>
   <header class="masthead">
     <div class="brand">
       <span class="logo" aria-hidden="true">CN</span>
       <div>
         <p class="brand-name">Commonnest</p>
-        <p class="brand-tag">Fictional week · saved in this browser only</p>
+        <p class="brand-tag">Sample week · saved in this browser only</p>
       </div>
     </div>
-    <p id="storageBanner" class="banner warn" hidden>Storage unavailable — this session stays in memory until you close the tab.</p>
+    <p id="storageBanner" class="banner warn" hidden>This session stays in memory until you close the tab — storage is unavailable.</p>
   </header>
 
   <main class="layout">
     <section class="intro card">
-      <h1>One week, two people, shared shopping</h1>
-      <p>Mira and Noah are labels on a local demo — nothing syncs across devices or accounts.</p>
+      <h1>Plan the week together</h1>
+      <p>Mira and Noah are fictional names on a local planner. Nothing syncs to other devices or people.</p>
     </section>
 
     <section class="card" aria-labelledby="week-heading">
-      <h2 id="week-heading">This week</h2>
+      <h2 id="week-heading">Week agenda</h2>
+      <p class="muted">Tasks and meals appear on their due day. Move a task below and watch it travel here once.</p>
       <div id="weekGrid" class="week-grid"></div>
     </section>
 
@@ -37,18 +38,17 @@
 
     <section class="card" aria-labelledby="meals-heading">
       <h2 id="meals-heading">Meals</h2>
+      <p id="mealFeedback" class="feedback" hidden></p>
       <div id="mealControls"></div>
     </section>
 
     <section class="card" aria-labelledby="shop-heading">
       <h2 id="shop-heading">Shopping list</h2>
-      <p class="muted">Compatible units sum across meal instances. Incompatible units stay on separate lines.</p>
+      <p class="muted">Recipe amounts in grams add up when you include each meal. Pantry items in other units stay on their own line.</p>
       <ul id="shoppingList"></ul>
-      <p><button type="button" id="combineBtn" class="btn-quiet">Try combining tomatoes in g and kg</button></p>
-      <p id="combineMsg" class="decline" hidden></p>
     </section>
 
-    <p class="actions"><button type="button" id="resetBtn" class="btn-secondary">Reset this demo</button></p>
+    <p class="actions"><button type="button" id="resetBtn" class="btn-secondary">Reset this week</button></p>
   </main>
   <script type="module" src="app.js"></script>
 </body>

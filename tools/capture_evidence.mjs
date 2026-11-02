@@ -5,41 +5,20 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { PAGES_PATH_PREFIX } from "../logic.js";
+import { allocatePort, pagesBaseUrl } from "./pages_server.mjs";
+import { browserPath, stagePagesSite } from "./stage_site.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 const outDir = path.join(repoRoot, "docs", "evidence");
 fs.mkdirSync(outDir, { recursive: true });
 
-const reviewRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cn-cap-"));
-const mount = path.join(reviewRoot, "commonnest-showcase", "demo");
-fs.mkdirSync(path.dirname(mount), { recursive: true });
-fs.cpSync(path.join(repoRoot, "demo"), mount, { recursive: true });
-
-const PORT = 8822;
-const BASE = `http://127.0.0.1:${PORT}/commonnest-showcase/demo/`;
-
-const server = spawn(
-  "python",
-  ["-m", "http.server", String(PORT), "--bind", "127.0.0.1", "--directory", reviewRoot],
-  { stdio: "ignore" },
-);
-
-function browser() {
-  for (const p of [
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  ]) {
-    if (fs.existsSync(p)) return p;
-  }
-  return "msedge";
-}
-
-async function capture(url, outPath, width, height, beforeShot) {
+async function capture(base, outPath, width, height, setupJs = "") {
   const dbgPort = 9990 + Math.floor(Math.random() * 15);
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "cn-cap-"));
   const proc = spawn(
-    browser(),
+    browserPath(),
     ["--headless=new", `--remote-debugging-port=${dbgPort}`, `--user-data-dir=${userData}`, "about:blank"],
     { stdio: "ignore" },
   );
@@ -70,15 +49,17 @@ async function capture(url, outPath, width, height, beforeShot) {
       ws.addEventListener("open", res);
       ws.addEventListener("error", rej);
     });
-    await send("Page.navigate", { url });
+    await send("Page.navigate", { url: base });
     await new Promise((r) => setTimeout(r, 900));
+    if (setupJs) {
+      await send("Runtime.evaluate", { expression: setupJs });
+    }
     await send("Emulation.setDeviceMetricsOverride", {
       width,
       height,
       deviceScaleFactor: width <= 400 ? 2 : 1,
       mobile: width <= 400,
     });
-    if (beforeShot) await beforeShot(send);
     const shot = await send("Page.captureScreenshot", { format: "png" });
     fs.writeFileSync(outPath, Buffer.from(shot.data, "base64"));
     ws.close();
@@ -87,20 +68,35 @@ async function capture(url, outPath, width, height, beforeShot) {
     try {
       fs.rmSync(userData, { recursive: true, force: true, maxRetries: 3 });
     } catch {
-      /* Windows may lock profile briefly */
+      /* ignore */
     }
   }
 }
 
 async function main() {
-  await new Promise((r) => setTimeout(r, 600));
-  const desktop = path.join(outDir, "week-shopping-desktop-1280.png");
-  const mobile = path.join(outDir, "tasks-mobile-390.png");
-  await capture(BASE, desktop, 1280, 800);
-  await capture(BASE + "#tasks", mobile, 390, 844);
-  console.log("wrote", desktop, mobile);
-  server.kill("SIGTERM");
-  fs.rmSync(reviewRoot, { recursive: true, force: true });
+  const port = await allocatePort();
+  const { reviewRoot } = stagePagesSite(repoRoot, PAGES_PATH_PREFIX);
+  const base = pagesBaseUrl(port, PAGES_PATH_PREFIX);
+  const server = spawn(
+    "python",
+    ["-m", "http.server", String(port), "--bind", "127.0.0.1", "--directory", reviewRoot],
+    { stdio: "ignore" },
+  );
+  await new Promise((r) => setTimeout(r, 500));
+  try {
+    const desktop = path.join(outDir, "week-agenda-desktop-1280.png");
+    const mobile = path.join(outDir, "week-agenda-mobile-390.png");
+    const moveTask = `
+      const sel = document.querySelector('#taskList select[aria-label="Due day for Pick up vegetables"]');
+      sel.value = 'Wed'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+    `;
+    await capture(base, desktop, 1280, 800, moveTask);
+    await capture(base, mobile, 390, 844, moveTask);
+    console.log("wrote", desktop, mobile);
+  } finally {
+    server.kill("SIGTERM");
+    fs.rmSync(reviewRoot, { recursive: true, force: true });
+  }
 }
 
 main().catch((e) => {

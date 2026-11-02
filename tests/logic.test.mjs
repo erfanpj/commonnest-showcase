@@ -2,70 +2,54 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   seedState,
-  aggregateShopping,
-  addMealInstanceById,
-  addMealInstance,
+  shoppingWithPantry,
+  scheduleMeal,
+  addIngredientsForMeal,
   updateTask,
   toggleShoppingLine,
-  tryCombineUnits,
-  lineKey,
+  tasksForDay,
   STORAGE_KEY,
-} from "../demo/logic.js";
+} from "../logic.js";
 
-describe("shopping aggregation", () => {
-  it("sums tomatoes from two meal instances in grams", () => {
-    const s = seedState();
-    const lines = aggregateShopping(s.mealInstances, s.shopping);
-    const tom = lines.find((l) => l.name === "Tomatoes");
-    assert.equal(tom.qty, 350);
-    assert.equal(tom.sources.length, 2);
-  });
-
-  it("does not double when re-adding the same instance id", () => {
-    const s = seedState();
-    const inst = s.mealInstances[0];
-    const next = addMealInstanceById(s, inst);
-    assert.equal(next.mealInstances.length, s.mealInstances.length);
-    const tom = aggregateShopping(next.mealInstances).find((l) => l.name === "Tomatoes");
-    assert.equal(tom.qty, 350);
-  });
-
-  it("adds a second recipe instance", () => {
+describe("week agenda", () => {
+  it("lists tasks on their due day only", () => {
     let s = seedState();
-    s = addMealInstance(s, "veggie-pasta", "Sun");
-    const tom = aggregateShopping(s.mealInstances).find((l) => l.name === "Tomatoes");
-    assert.equal(tom.qty, 550);
+    assert.equal(tasksForDay(s, "Mon").length, 2);
+    s = updateTask(s, "t1", { day: "Wed" });
+    assert.equal(tasksForDay(s, "Wed").length, 1);
+    assert.equal(tasksForDay(s, "Mon").length, 1);
   });
 });
 
-describe("tasks", () => {
-  it("keeps stable id when owner and day change", () => {
-    let s = seedState();
-    s = updateTask(s, "t1", { owner: "Mira", day: "Wed" });
-    const t = s.tasks.find((x) => x.id === "t1");
-    assert.equal(t.owner, "Mira");
-    assert.equal(t.day, "Wed");
-    assert.equal(s.tasks.filter((x) => x.id === "t1").length, 1);
+describe("shopping", () => {
+  it("sums counted meal ingredients and shows pantry kg separately", () => {
+    const s = seedState();
+    const lines = shoppingWithPantry(s.mealInstances, s.shopping, s.ingredientsCountedIds);
+    const g = lines.find((l) => l.unit === "g" && l.name === "Tomatoes");
+    const kg = lines.find((l) => l.unit === "kg");
+    assert.equal(g.qty, 350);
+    assert.equal(kg.qty, 1);
+    assert.ok(kg.note);
   });
-});
 
-describe("checked lines reopen on qty change", () => {
-  it("clears check and stores note", () => {
+  it("refuses duplicate ingredient add for same meal", () => {
     let s = seedState();
-    const key = lineKey("Tomatoes", "g");
+    const r = addIngredientsForMeal(s, "m1");
+    assert.match(r.mealFeedback, /already/i);
+  });
+
+  it("reopens checked line when qty increases", () => {
+    let s = seedState();
+    const key = "tomatoes::g";
     s = toggleShoppingLine(s, key, true);
-    s = addMealInstance(s, "tomato-soup", "Sun");
-    const line = aggregateShopping(s.mealInstances, s.shopping).find((l) => l.key === key);
+    s = scheduleMeal(s, "tomato-soup", "Sun");
+    const newId = s.mealInstances.at(-1).id;
+    s = addIngredientsForMeal(s, newId);
+    const line = shoppingWithPantry(s.mealInstances, s.shopping, s.ingredientsCountedIds).find(
+      (l) => l.key === key,
+    );
     assert.equal(line.checked, false);
-    assert.match(line.reopenNote, /Checked 350/);
-  });
-});
-
-describe("units", () => {
-  it("declines incompatible combine", () => {
-    const r = tryCombineUnits(seedState(), "Tomatoes", "g", "Tomatoes", "kg");
-    assert.equal(r.ok, false);
-    assert.match(r.state.combineDeclined, /Cannot combine/);
+    assert.match(line.reopenNote, /500/);
   });
 });
 
