@@ -1,0 +1,169 @@
+:root {
+  --raspberry: #db2777;
+  --sunflower: #eab308;
+  --teal: #0f766e;
+  --ink: #1e293b;
+  --muted: #64748b;
+  --bg: #fff7ed;
+  --card: #ffffff;
+  --focus: #2563eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, Segoe UI, Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  background: var(--sunflower);
+  color: var(--ink);
+  padding: 0.5rem 1rem;
+}
+.skip-link:focus { left: 0; }
+
+.masthead {
+  background: var(--ink);
+  color: #fff;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand { display: flex; gap: 0.75rem; align-items: center; }
+.logo {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--raspberry), var(--teal));
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.brand-name { margin: 0; font-weight: 700; }
+.brand-tag { margin: 0; font-size: 0.9rem; opacity: 0.92; }
+.banner.warn { background: #fef9c3; color: #713f12; padding: 0.5rem 0.75rem; border-radius: 0.5rem; }
+
+.layout { max-width: 52rem; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+.card {
+  background: var(--card);
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+h1 { font-size: 1.3rem; margin-top: 0; }
+h2 { font-size: 1.05rem; margin-top: 0; color: var(--teal); }
+h3 { font-size: 0.95rem; margin: 0 0 0.35rem; color: var(--raspberry); }
+.muted { color: #334155; font-size: 0.92rem; }
+.feedback { color: var(--teal); font-weight: 600; }
+
+.week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+@media (max-width: 720px) {
+  .week-grid { grid-template-columns: 1fr; }
+}
+
+.day-col {
+  border: 1px solid #fde68a;
+  border-radius: 0.5rem;
+  padding: 0.5rem;
+  background: #fffbeb;
+  min-height: 4.5rem;
+}
+.day-empty { color: var(--muted); margin: 0; font-size: 0.85rem; }
+
+.agenda-tasks, .agenda-meals {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.85rem;
+}
+.agenda-tasks li { margin-bottom: 0.25rem; }
+.owner-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: var(--raspberry);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+#taskList { list-style: none; padding: 0; margin: 0; }
+.task-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.task-title { font-weight: 600; min-width: 9rem; }
+
+.meal-add { margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px dashed #e2e8f0; }
+.meal-add button { margin-top: 0.35rem; }
+
+#shoppingList { list-style: none; padding: 0; }
+#shoppingList li {
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+#shoppingList li.checked { background: #ecfdf5; }
+.pantry-line { background: #fdf2f8; }
+.sources, .unit-note { font-size: 0.85rem; color: var(--muted); margin: 0.25rem 0 0; }
+.reopen { font-size: 0.85rem; color: var(--raspberry); margin: 0.25rem 0 0; }
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.85rem;
+  border: 2px solid var(--teal);
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-inline {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+}
+.btn-inline:disabled {
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  color: var(--muted);
+  cursor: default;
+}
+.btn-secondary {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--raspberry);
+}
+.btn-secondary:hover { background: #fdf2f8; }
+
+select { font: inherit; padding: 0.25rem; margin-left: 0.25rem; min-height: 2.25rem; }
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 320px) {
+  .task-title { min-width: 100%; }
+  button, select { width: 100%; margin: 0.25rem 0; }
+}
